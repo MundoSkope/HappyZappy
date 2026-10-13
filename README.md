@@ -31,11 +31,18 @@ redeploys automatically on every push to `main`.
   `data.json`: the full 217-country panel with every zapper field computed.
   Values here are verified to match `data.json` exactly, country-year by
   country-year.
-- `data/HappyZappyFinal_v3.xlsx` — the regression input used by the paper's
-  Section 4 replication notebook (not yet included in this repo). Adds
-  `lifeEval` (life-evaluation/happiness survey data) on top of the same
-  zapper fields; the regression sample is the 135-country subset with
-  non-missing happiness, zapper, and GDP coverage across all three.
+- `data/HappyZappyFinal_v3.xlsx` — the regression input used by
+  `analysis/HappyZappyAnalysis.ipynb`. Adds `lifeEval` (life-evaluation/
+  happiness survey data) on top of the same zapper fields; the regression
+  sample is the 135-country subset with non-missing happiness, zapper,
+  and GDP coverage across all three.
+- `analysis/HappyZappyAnalysis.ipynb` — the Section 4 replication notebook.
+  Runs directly against `data/HappyZappyFinal_v3.xlsx` and reproduces every
+  reported result exactly: the pooled baseline (1,211 obs, 135 countries),
+  the three income-group splits, the 14-zapper component table, and the
+  within-country variation diagnostic. Committed with outputs executed, so
+  the numbers are visible without re-running — though re-running end to end
+  from the raw workbook is the point.
 
 ## Zapper methodology, in brief
 
@@ -63,7 +70,9 @@ see the paper for the current canonical description in the meantime.
 
 ## Status
 
-Web app in active development. The two source workbooks behind the web
-app and the paper's regression are now included under `data/`; the
-replication notebook itself, and written-up methodology notes (how each
-zapper field is constructed from raw sources), are still to follow.
+Web app in active development. The source workbooks behind the web app
+and the paper's regression are included under `data/`, and
+`analysis/HappyZappyAnalysis.ipynb` reproduces Section 4's results end to
+end from `data/HappyZappyFinal_v3.xlsx`. Written-up methodology notes
+(how each zapper field is constructed from raw sources, e.g. WDI/EM-DAT/
+IHME/OECD) are still to follow.
