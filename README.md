@@ -11,10 +11,13 @@ how zappers have moved over time.
 
 ## Live app
 
+**https://clever-truffle-6fe6f3.netlify.app**
+
 Static site, no build step: `index.html` + two data files (`data.json`,
-`world-topo.json`), all loaded via relative `fetch()`. Deploying to Netlify
-needs no configuration beyond pointing it at this repo — `netlify.toml` sets
-the publish directory to the repo root.
+`world-topo.json`), all loaded via relative `fetch()`. Deployed on Netlify
+directly from this repo with no configuration beyond pointing it here —
+`netlify.toml` sets the publish directory to the repo root, and Netlify
+redeploys automatically on every push to `main`.
 
 ## What's in this repo
 
