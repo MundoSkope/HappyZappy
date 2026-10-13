@@ -23,10 +23,19 @@ redeploys automatically on every push to `main`.
 
 - `index.html` — the whole app (HTML/CSS/JS). Charts/map use D3, topojson,
   and Chart.js from CDN; no local build tooling required.
-- `data.json` — the country-year zapper panel (2011–2025, 153 countries,
+- `data.json` — the country-year zapper panel (2011–2025, 217 countries,
   unbalanced), plus pre-aggregated World/region averages.
 - `world-topo.json` — TopoJSON world map (country boundaries) for the map view.
 - `netlify.toml` — zero-config static-site deploy settings.
+- `data/HappyZappyWebFinal.xlsx` — the canonical source workbook behind
+  `data.json`: the full 217-country panel with every zapper field computed.
+  Values here are verified to match `data.json` exactly, country-year by
+  country-year.
+- `data/HappyZappyFinal_v3.xlsx` — the regression input used by the paper's
+  Section 4 replication notebook (not yet included in this repo). Adds
+  `lifeEval` (life-evaluation/happiness survey data) on top of the same
+  zapper fields; the regression sample is the 135-country subset with
+  non-missing happiness, zapper, and GDP coverage across all three.
 
 ## Zapper methodology, in brief
 
@@ -54,6 +63,7 @@ see the paper for the current canonical description in the meantime.
 
 ## Status
 
-Web app in active development; this repo currently holds the deployable
-app only. Methodology notes and the replication pipeline (raw data →
-`data.json`) to follow.
+Web app in active development. The two source workbooks behind the web
+app and the paper's regression are now included under `data/`; the
+replication notebook itself, and written-up methodology notes (how each
+zapper field is constructed from raw sources), are still to follow.
