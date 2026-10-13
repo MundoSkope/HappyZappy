@@ -1,0 +1,1531 @@
+<title>HappyZappy Explorer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+
+<style>
+/* ---- Design plan -------------------------------------------------------
+   Subject: "happiness zappers" -- forced, non-discretionary costs (conflict,
+   pollution, disease, inflation...) priced in dollars per capita, country
+   by country, 2011-2025. Visual world: an electrical/metering idea (a
+   "zapper" drains value the way a short drains a charge) crossed with a
+   serious economics-data-journalism register -- not playful, not a toy.
+   Layout: sticky top tab-bar switching three full-bleed views (Map /
+   Compare / Profile), each a control rail above one large visualization.
+   Color: cool paper neutrals + ink navy text; one electric teal "current"
+   accent for interactive chrome; a separate semantic palette (five zapper
+   categories) that never borrows the accent hue, so UI state and data
+   meaning stay visually distinct. Type: Newsreader (serif, editorial,
+   restrained) for headings, IBM Plex Sans for UI/body, IBM Plex Mono with
+   tabular numerals for every figure that must line up in a column.
+------------------------------------------------------------------------- */
+:root{
+  --bg:#eef3f4;
+  --surface:#ffffff;
+  --surface-2:#e3eaec;
+  --ink:#121a1f;
+  --ink-muted:#4c5c63;
+  --ink-faint:#7c8c93;
+  --border:#cad6d9;
+  --accent:#0d7f88;
+  --accent-ink:#ffffff;
+  --accent-soft:#d8eef0;
+  --nodata:#c9d3d6;
+  --cat-conflict:#bf4036;
+  --cat-environment:#3f8f52;
+  --cat-health:#3464a8;
+  --cat-macro:#c0812b;
+  --cat-implicit:#7a6aa8;
+  --type-direct:#2f3d44;
+  --type-life:#0d7f88;
+  --type-implicit-t:#9aa7ac;
+  --shadow:0 1px 2px rgba(18,26,31,.06),0 6px 16px rgba(18,26,31,.07);
+  --font-display:'Newsreader',Georgia,'Times New Roman',serif;
+  --font-body:'IBM Plex Sans',system-ui,-apple-system,Segoe UI,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1517; --surface:#161e21; --surface-2:#1c2528;
+    --ink:#eaf1f2; --ink-muted:#a9bac0; --ink-faint:#7f9196;
+    --border:#2b3639; --accent:#2fc2cc; --accent-ink:#06211f; --accent-soft:#0f3135;
+    --nodata:#2c3639;
+    --cat-conflict:#e0756b; --cat-environment:#6cb97f; --cat-health:#6f9fdb;
+    --cat-macro:#dba758; --cat-implicit:#a697d6;
+    --type-direct:#cdd6d9; --type-life:#2fc2cc; --type-implicit-t:#5c6a6f;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 24px rgba(0,0,0,.45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1517; --surface:#161e21; --surface-2:#1c2528;
+  --ink:#eaf1f2; --ink-muted:#a9bac0; --ink-faint:#7f9196;
+  --border:#2b3639; --accent:#2fc2cc; --accent-ink:#06211f; --accent-soft:#0f3135;
+  --nodata:#2c3639;
+  --cat-conflict:#e0756b; --cat-environment:#6cb97f; --cat-health:#6f9fdb;
+  --cat-macro:#dba758; --cat-implicit:#a697d6;
+  --type-direct:#cdd6d9; --type-life:#2fc2cc; --type-implicit-t:#5c6a6f;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 24px rgba(0,0,0,.45);
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box;}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:var(--font-body); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--accent-soft);}
+h1,h2,h3{font-family:var(--font-display); font-weight:600; text-wrap:balance; margin:0;}
+.mono,.num{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+button,select,input{font-family:inherit;}
+a{color:var(--accent);}
+
+.wrap{max-width:1180px; margin:0 auto; padding-inline:20px;}
+
+/* ---- Top bar ---- */
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:40;
+  background:var(--surface); border-bottom:1px solid var(--border);
+}
+.topbar-inner{display:flex; align-items:baseline; gap:18px; flex-wrap:wrap; padding-block:14px;}
+.brand{display:flex; align-items:baseline; gap:10px; flex:1; min-width:0;}
+.brand-mark{font-size:1.5rem; line-height:1;}
+.brand h1{font-size:1.3rem;}
+.brand span.tag{color:var(--ink-faint); font-size:.8rem; font-family:var(--font-body);}
+.tabs{display:flex; gap:4px; background:var(--surface-2); border-radius:10px; padding:3px;}
+.tab{
+  border:none; background:transparent; color:var(--ink-muted); cursor:pointer;
+  font-size:.86rem; font-weight:600; padding:7px 14px; border-radius:8px;
+  transition:background .15s,color .15s;
+}
+.tab:hover{color:var(--ink);}
+.tab[aria-selected="true"]{background:var(--accent); color:var(--accent-ink);}
+
+main{padding-block:22px 60px;}
+.view{display:none;}
+.view.active{display:block;}
+#shared-filters{display:none;}
+#shared-filters.active{display:block;}
+
+.lede{max-width:62ch; color:var(--ink-muted); margin-bottom:18px; font-size:.95rem;}
+.lede strong{color:var(--ink); font-weight:600;}
+
+/* ---- Controls ---- */
+.controls{
+  display:flex; flex-wrap:wrap; gap:14px 22px; align-items:end;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:14px 16px; margin-bottom:18px; box-shadow:var(--shadow);
+}
+.field{display:flex; flex-direction:column; gap:5px; min-width:0;}
+.field label{font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint);}
+.field select, .field input[type="text"]{
+  border:1px solid var(--border); border-radius:8px; background:var(--surface);
+  color:var(--ink); padding:7px 10px; font-size:.88rem; min-width:0;
+}
+.field select{min-width:220px;}
+.field.grow{flex:1 1 220px;}
+.seg{display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+.seg button{
+  border:none; background:var(--surface); color:var(--ink-muted); padding:7px 12px;
+  font-size:.82rem; font-weight:600; cursor:pointer; border-right:1px solid var(--border);
+}
+.seg button:last-child{border-right:none;}
+.seg button[aria-pressed="true"]{background:var(--accent); color:var(--accent-ink);}
+
+.year-field{min-width:260px;}
+.year-row{display:flex; align-items:center; gap:10px;}
+.year-row input[type="range"]{flex:1; accent-color:var(--accent);}
+.year-row .year-val{font-family:var(--font-mono); font-weight:600; width:3.4em; text-align:right;}
+
+/* ---- Zapper picker (cumulate) ---- */
+.zapper-picker{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:14px 16px; margin-bottom:18px;
+}
+.zapper-picker-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px;}
+.zapper-picker-head h3{font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint);}
+.zapper-presets{display:flex; gap:6px;}
+.zapper-presets button{
+  border:1px solid var(--border); background:var(--surface); color:var(--ink-muted);
+  font-size:.74rem; font-weight:600; padding:4px 10px; border-radius:7px; cursor:pointer;
+}
+.zapper-presets button:hover{color:var(--ink); border-color:var(--accent);}
+.zapper-groups{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px;}
+.zapper-group h4{
+  font-size:.7rem; font-weight:600; margin-bottom:6px; padding-bottom:4px;
+  border-bottom:2px solid currentColor; display:inline-block;
+}
+.zapper-opt{display:flex; align-items:baseline; gap:7px; padding:3px 0; font-size:.83rem;}
+.zapper-opt input{accent-color:var(--accent); flex:none;}
+.zapper-opt label{min-width:0; cursor:pointer;}
+.zapper-opt .type-tag{font-size:.68rem; color:var(--ink-faint); white-space:nowrap;}
+.zapper-count{font-size:.78rem; color:var(--ink-muted);}
+.type-legend{display:flex; flex-wrap:wrap; gap:14px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border); font-size:.74rem; color:var(--ink-muted);}
+.type-legend .item{display:flex; align-items:center; gap:6px;}
+.type-legend .swatch{width:10px; height:10px; border-radius:2px; flex:none;}
+.type-legend .swatch.implicit{background:repeating-linear-gradient(45deg, var(--type-implicit-t) 0 2px, transparent 2px 4px);}
+.zero-zapper-banner{
+  margin-top:14px; padding:10px 14px; border-radius:10px; font-size:.84rem;
+  background:var(--accent-soft); border-left:3px solid var(--accent); color:var(--ink);
+}
+
+/* ---- Map view ---- */
+.map-shell{
+  display:grid; grid-template-columns: 1fr 230px; gap:16px;
+}
+.map-panel{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:10px; position:relative; min-width:0;
+}
+#map-svg{width:100%; height:auto; display:block;}
+.map-country{stroke:var(--surface); stroke-width:.4; cursor:pointer; transition:opacity .1s;}
+.map-country:hover{opacity:.82;}
+.map-country.nodata{fill:var(--nodata);}
+
+.legend-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:14px; align-self:start;
+}
+.legend-card h3{font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); margin-bottom:10px;}
+.legend-grad{height:12px; border-radius:6px; margin-bottom:6px;}
+.legend-scale{display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:.72rem; color:var(--ink-muted);}
+.legend-note{margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:.78rem; color:var(--ink-muted);}
+.legend-note .dot{display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--nodata); margin-right:6px;}
+
+/* ---- Rankings table ---- */
+.table-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:4px; margin-top:16px; overflow-x:auto;
+}
+table.rank-table{width:100%; border-collapse:collapse; font-size:.85rem; min-width:720px;}
+table.rank-table th, table.rank-table td{padding:8px 12px; text-align:right; white-space:nowrap;}
+table.rank-table th:nth-child(2), table.rank-table td:nth-child(2){text-align:left;}
+table.rank-table thead th{
+  position:sticky; top:0; background:var(--surface); border-bottom:1px solid var(--border);
+  font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-faint);
+  cursor:pointer; user-select:none; font-weight:600;
+}
+table.rank-table thead th:hover{color:var(--accent);}
+table.rank-table thead th.sorted{color:var(--accent);}
+table.rank-table thead th .arrow{display:inline-block; width:.9em;}
+table.rank-table tbody tr:nth-child(odd){background:var(--surface-2);}
+table.rank-table td{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+table.rank-table td.t-country{font-family:var(--font-body); font-weight:500;}
+table.rank-table td.t-region{font-family:var(--font-body); color:var(--ink-muted); font-size:.78rem;}
+.delta-up{color:var(--cat-environment); font-weight:600;}
+.delta-down{color:var(--cat-conflict); font-weight:600;}
+.delta-flat{color:var(--ink-faint);}
+.t-zap-cell{display:flex; flex-direction:column; align-items:flex-end; gap:3px;}
+.comp-bar{width:84px; height:5px; border-radius:3px; overflow:hidden; display:flex; background:var(--surface-2);}
+.comp-bar span{height:100%; display:block;}
+.comp-bar .seg-direct{background:var(--type-direct);}
+.comp-bar .seg-life{background:var(--type-life);}
+.comp-bar .seg-implicit{background:repeating-linear-gradient(45deg, var(--type-implicit-t) 0 2px, transparent 2px 4px);}
+
+/* ---- Winners & losers slope chart ---- */
+.slope-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:16px; margin-top:16px;
+}
+.slope-head{display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px; margin-bottom:6px;}
+.slope-head h3{font-size:1.1rem;}
+.slope-controls{display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; align-items:end;}
+.slope-controls .field label{font-size:.72rem;}
+#slope-topn{width:76px;}
+#slope-highlight{width:200px;}
+.slope-scroll{max-height:720px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;}
+#slope-svg{width:100%; height:auto; display:block;}
+.slope-line{fill:none; stroke-width:1.8; transition:opacity .15s, stroke-width .15s;}
+.slope-line.up{stroke:var(--cat-environment);}
+.slope-line.down{stroke:var(--cat-conflict);}
+.slope-line.flat{stroke:var(--ink-faint);}
+.slope-line.nodata{stroke:var(--ink-faint); stroke-dasharray:3 3;}
+.slope-line.dim{opacity:.18;}
+.slope-line.hi{stroke-width:3.2; opacity:1;}
+.slope-dot{transition:opacity .15s;}
+.slope-dot.dim{opacity:.18;}
+.slope-label{font-family:var(--font-body); font-size:11px; fill:var(--ink-muted); cursor:default;}
+.slope-label.dim{opacity:.22;}
+.slope-label.hi{fill:var(--ink); font-weight:600;}
+.slope-rank{font-family:var(--font-mono); font-size:10px; fill:var(--ink-faint);}
+.slope-axis-label{font-family:var(--font-body); font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em; fill:var(--ink-faint);}
+.slope-divider{stroke:var(--border); stroke-dasharray:2 3;}
+.slope-note{font-size:.78rem; color:var(--ink-faint); margin-top:10px;}
+.slope-empty{font-size:.85rem; color:var(--ink-faint); padding:30px 10px; text-align:center;}
+
+.tooltip{
+  position:fixed; pointer-events:none; background:var(--ink); color:var(--surface);
+  padding:9px 12px; border-radius:8px; font-size:.8rem; max-width:220px; z-index:60;
+  box-shadow:var(--shadow); line-height:1.4;
+}
+.tooltip strong{display:block; font-family:var(--font-display); font-size:.95rem; margin-bottom:2px;}
+.tooltip .tt-val{font-family:var(--font-mono); color:var(--accent-soft);}
+
+/* ---- Compare view ---- */
+.compare-shell{display:grid; grid-template-columns: 260px 1fr; gap:16px;}
+.country-picker{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:12px; align-self:start;
+}
+.country-picker input[type="text"]{
+  width:100%; border:1px solid var(--border); border-radius:8px; padding:7px 10px;
+  background:var(--surface); color:var(--ink); margin-bottom:8px; font-size:.85rem;
+}
+.country-list{max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:1px;}
+.country-row{
+  display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:6px;
+  font-size:.84rem; cursor:pointer;
+}
+.country-row:hover{background:var(--surface-2);}
+.country-row input{accent-color:var(--accent);}
+.swatch{width:9px; height:9px; border-radius:50%; flex:none;}
+.world-avg-row{font-weight:600; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--border);}
+.world-swatch{background:none; border:2px dashed var(--ink-faint); box-sizing:border-box;}
+.region-picker{margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border);}
+.region-picker summary{
+  font-size:.82rem; font-weight:600; cursor:pointer; color:var(--ink-muted);
+}
+.region-picker summary:hover{color:var(--ink);}
+.region-group{margin-top:8px;}
+.region-group h4{font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-faint); margin-bottom:4px;}
+.region-row{display:flex; align-items:center; gap:7px; font-size:.8rem; cursor:pointer; padding:2px 0;}
+.region-row input{accent-color:var(--accent); flex:none;}
+.picker-hint{font-size:.72rem; color:var(--ink-faint); margin-top:8px; padding-top:8px; border-top:1px solid var(--border);}
+.chart-panel{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:16px; min-width:0;
+}
+.chart-panel .canvas-wrap{position:relative; height:420px;}
+
+/* ---- Profile view ---- */
+.profile-shell{display:grid; grid-template-columns: 300px 1fr; gap:16px;}
+.profile-info{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:18px; align-self:start;
+}
+.profile-info h2{font-size:1.4rem; margin-bottom:2px;}
+.profile-info .sub{color:var(--ink-faint); font-size:.82rem; margin-bottom:14px;}
+.fact-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; margin-bottom:14px;}
+.fact{display:flex; flex-direction:column; gap:2px;}
+.fact .k{font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint);}
+.fact .v{font-family:var(--font-mono); font-size:.92rem;}
+.tier-boxes{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:4px;}
+.total-box{
+  background:var(--accent-soft); border-radius:10px; padding:12px; margin-top:4px;
+}
+.total-box .k{font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-muted);}
+.total-box .v{font-family:var(--font-mono); font-size:1.5rem; font-weight:600; color:var(--ink);}
+.total-box .v2{font-family:var(--font-mono); font-size:.85rem; color:var(--ink-muted);}
+.total-box .tag{font-size:.64rem; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-faint); margin-top:4px; display:block;}
+.total-box.tier-welfare{background:var(--surface-2);}
+@media (max-width:640px){.tier-boxes{grid-template-columns:1fr;}}
+.comp-rows{margin-top:14px; display:flex; flex-direction:column; gap:8px;}
+.comp-row{display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:baseline;}
+.comp-row .lbl{font-size:.78rem; color:var(--ink-muted);}
+.comp-row .amt{font-family:var(--font-mono); font-size:.85rem; font-weight:600; text-align:right;}
+.comp-row .track{grid-column:1 / -1; height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden;}
+.comp-row .track span{height:100%; display:block;}
+.comp-note{font-size:.72rem; color:var(--ink-faint); margin-top:6px;}
+.profile-chart-panel{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:16px; min-width:0;
+}
+.profile-chart-panel .canvas-wrap{position:relative; height:520px;}
+.cat-legend{display:flex; flex-wrap:wrap; gap:12px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border);}
+.cat-legend .item{display:flex; align-items:center; gap:6px; font-size:.76rem; color:var(--ink-muted);}
+.cat-legend .swatch{width:10px; height:10px; border-radius:3px;}
+.no-data-note{font-size:.78rem; color:var(--ink-faint); margin-top:10px;}
+
+footer{border-top:1px solid var(--border); padding-block:18px 40px;}
+footer p{max-width:62ch; color:var(--ink-faint); font-size:.78rem;}
+
+@media (max-width: 760px){
+  .map-shell, .compare-shell, .profile-shell{grid-template-columns:1fr;}
+  .field select{min-width:0; width:100%;}
+  .topbar-inner{flex-direction:column; align-items:stretch;}
+  .tabs{align-self:flex-start;}
+}
+</style>
+
+<div class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <h1>HappyZappy Explorer</h1>
+      <span class="tag">pricing the costs that quietly drain wellbeing</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="View">
+      <button class="tab" role="tab" data-view="map" aria-selected="true">World Map</button>
+      <button class="tab" role="tab" data-view="table" aria-selected="false">Table</button>
+      <button class="tab" role="tab" data-view="slope" aria-selected="false">Winners &amp; Losers</button>
+      <button class="tab" role="tab" data-view="compare" aria-selected="false">Compare Over Time</button>
+      <button class="tab" role="tab" data-view="profile" aria-selected="false">Country Profile</button>
+    </nav>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- =============== SHARED FILTERS (World Map / Table / Winners & Losers) =============== -->
+  <div class="shared-filters active" id="shared-filters">
+    <p class="lede">A <strong>happiness zapper</strong> is a cost no household chose to pay &mdash; disease, conflict, pollution, forced saving against risk &mdash; priced in dollars per person so it can sit next to GDP on equal terms. Choose which zappers to cumulate and a year, to see where they bite hardest &mdash; and how much of each country's GDP per capita they quietly take back.</p>
+
+    <div class="zapper-picker">
+      <div class="zapper-picker-head">
+        <h3>Cumulate these zappers</h3>
+        <div class="zapper-presets">
+          <button type="button" data-preset="priced">All priced (13)</button>
+          <button type="button" data-preset="all">All 16</button>
+          <button type="button" data-preset="none">None</button>
+        </div>
+        <span class="zapper-count" id="zapper-count"></span>
+      </div>
+      <div class="zapper-groups" id="zapper-groups"></div>
+    </div>
+
+    <p class="zero-zapper-banner" id="zero-zapper-banner" hidden>Nothing cumulated yet &mdash; the map, table and chart are showing each country's raw GDP per capita, unadjusted. Pick zappers above to see how much they take back.</p>
+
+    <div class="controls">
+      <div class="field" id="map-metric-field">
+        <label>Shown as</label>
+        <div class="seg" id="map-metric-seg">
+          <button data-metric="abs" aria-pressed="true">$ per capita</button>
+          <button data-metric="pct" aria-pressed="false">% of GDP/cap</button>
+        </div>
+      </div>
+      <div class="field year-field grow">
+        <label for="map-year">Year</label>
+        <div class="year-row">
+          <input type="range" id="map-year" min="2011" max="2025" step="1" value="2021">
+          <span class="year-val mono" id="map-year-val">2021</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MAP VIEW ===================== -->
+  <section class="view active" id="view-map">
+    <div class="map-shell">
+      <div class="map-panel">
+        <svg id="map-svg" viewBox="0 0 960 500" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="legend-card">
+        <h3>Scale</h3>
+        <div class="legend-grad" id="legend-grad"></div>
+        <div class="legend-scale">
+          <span id="legend-min" class="num">0</span>
+          <span id="legend-max" class="num">0</span>
+        </div>
+        <div class="legend-note"><span class="dot"></span>No data this year</div>
+        <div class="legend-note" id="map-coverage-note" style="border-top:none; margin-top:8px; padding-top:0;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TABLE VIEW ===================== -->
+  <section class="view" id="view-table">
+    <div class="table-card">
+      <table class="rank-table" id="rank-table">
+        <thead>
+          <tr>
+            <th data-key="rankAdj">Rank<span class="arrow"></span></th>
+            <th data-key="name" style="text-align:left">Country<span class="arrow"></span></th>
+            <th data-key="region">Region<span class="arrow"></span></th>
+            <th data-key="yppp">GDP/cap, PPP<span class="arrow"></span></th>
+            <th data-key="zap">Cumulative zappers<span class="arrow"></span></th>
+            <th data-key="adj" title="GDP minus whichever zappers are selected above. With direct-only zappers this is a same-economy counterfactual (resource-adjusted GDP); add life-years zappers and it becomes a welfare-equivalent income instead (VSL-priced, not a production claim).">Adjusted GDP/cap<span class="arrow"></span></th>
+            <th data-key="rankGdp">GDP rank<span class="arrow"></span></th>
+            <th data-key="delta">&Delta; rank<span class="arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="rank-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== WINNERS & LOSERS VIEW ===================== -->
+  <section class="view" id="view-slope">
+    <div class="slope-card">
+      <div class="slope-head">
+        <h3>Winners &amp; losers</h3>
+      </div>
+      <p class="lede" style="margin-bottom:12px;">Same year and same cumulated zappers as selected above. Left: ranked by GDP per capita. Right: ranked after subtracting the zappers. A line that climbs from left to right is a country whose GDP understates how it's actually doing once its forced costs are counted; a line that falls is the opposite.</p>
+      <div class="slope-controls">
+        <div class="field">
+          <label for="slope-topn">Show top (by GDP/cap)</label>
+          <input type="number" id="slope-topn" min="10" max="80" step="5" value="30">
+        </div>
+        <div class="field grow">
+          <label for="slope-highlight">Highlight a country</label>
+          <input type="text" id="slope-highlight" placeholder="e.g. Indonesia">
+        </div>
+      </div>
+      <div class="slope-scroll">
+        <svg id="slope-svg" viewBox="0 0 640 600" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <p class="slope-note" id="slope-note"></p>
+    </div>
+  </section>
+  </section>
+
+  <!-- ===================== COMPARE VIEW ===================== -->
+  <section class="view" id="view-compare">
+    <p class="lede">Track one zapper across countries, 2011&ndash;2025. Everything on the chart is opt-in &mdash; check <strong>World average</strong>, any countries, and/or a country's regional average on the left to build the comparison yourself. Indonesia, for instance, sits in both "East Asia &amp; Pacific" (World Bank) and "South-eastern Asia" (UN) &mdash; check either, both, or neither. Gaps in a line mean the underlying data wasn't reported that year &mdash; not zero.</p>
+
+    <div class="controls">
+      <div class="field grow">
+        <label for="cmp-zapper">Zapper</label>
+        <select id="cmp-zapper"></select>
+      </div>
+    </div>
+
+    <div class="compare-shell">
+      <div class="country-picker">
+        <label class="country-row world-avg-row" for="cmp-world-toggle">
+          <input type="checkbox" id="cmp-world-toggle">
+          <span class="swatch world-swatch"></span>
+          <span>World average</span>
+        </label>
+
+        <details class="region-picker">
+          <summary>Region averages (World Bank / UN)</summary>
+          <div class="region-group">
+            <h4>World Bank regions</h4>
+            <div id="cmp-wb-regions"></div>
+          </div>
+          <div class="region-group">
+            <h4>UN sub-regions</h4>
+            <div id="cmp-un-regions"></div>
+          </div>
+        </details>
+
+        <input type="text" id="cmp-search" placeholder="Filter countries&hellip;">
+        <div class="country-list" id="cmp-country-list"></div>
+        <p class="picker-hint">Pick up to 6 countries to keep the chart readable. Region averages (above) are independent of this list &mdash; no country needs to be checked to show one.</p>
+      </div>
+      <div class="chart-panel">
+        <p class="zero-zapper-banner" id="cmp-empty-note" hidden>Nothing selected yet &mdash; check World average, a region, and/or a country on the left to start the comparison.</p>
+        <div class="canvas-wrap"><canvas id="compare-chart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PROFILE VIEW ===================== -->
+  <section class="view" id="view-profile">
+    <p class="lede">For one country and year, which zappers hit hardest? Bars are ranked by dollar cost per person; color marks each zapper's category.</p>
+
+    <div class="controls">
+      <div class="field grow">
+        <label for="prof-country">Country</label>
+        <select id="prof-country"></select>
+      </div>
+      <div class="field year-field">
+        <label for="prof-year">Year</label>
+        <div class="year-row">
+          <input type="range" id="prof-year" min="2011" max="2025" step="1" value="2021">
+          <span class="year-val mono" id="prof-year-val">2021</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-shell">
+      <div class="profile-info" id="profile-info"></div>
+      <div class="profile-chart-panel">
+        <div class="canvas-wrap"><canvas id="profile-chart"></canvas></div>
+        <div class="cat-legend" id="profile-cat-legend"></div>
+        <p class="no-data-note" id="profile-no-data"></p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <p>Data: country-year panel, 2011&ndash;2025 (153 countries, unbalanced), built from World Bank, IHME Global Burden of Disease, and UN sources. "Total Priced Zappers" sums the thirteen zappers with a defensible $ methodology; inflation, unemployment and the GNI&ndash;GDP gap are priced separately and shown on request since they're estimated, not directly observed. Some zapper series stop updating in the most recent years because the underlying source hasn't caught up &mdash; a limitation of the inputs, not of the method.</p>
+</footer>
+
+<div class="tooltip" id="tooltip" hidden></div>
+
+<script>
+(function(){
+"use strict";
+
+var DATA = null, TOPO = null, FEATURES = null;
+var state = {
+  view: 'map',
+  mapZappers: [], mapMetric: 'abs', mapYear: 2021,
+  tableSort: { key: 'adj', dir: 'desc' },
+  slopeTopN: 30, slopeHighlight: '',
+  cmpZapper: 'sumZap', cmpCountries: [], cmpWorld: false,
+  cmpRegions: [], // keys like 'wb|East Asia & Pacific' — standalone, independent of any country check
+  profCountry: 'US', profYear: 2021
+};
+
+var QUALITATIVE = ['#0d7f88','#c0812b','#bf4036','#3464a8','#7a6aa8','#3f8f52','#a14f8c','#5c7a3f'];
+
+function fmtMoney(v){
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  var r = Math.round(v);
+  return '$' + r.toLocaleString('en-US');
+}
+function fmtPct(v){
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return v.toFixed(1) + '%';
+}
+function fmtPop(v){
+  if (!v) return '—';
+  if (v >= 1e9) return (v/1e9).toFixed(2)+'B';
+  if (v >= 1e6) return (v/1e6).toFixed(1)+'M';
+  if (v >= 1e3) return (v/1e3).toFixed(0)+'K';
+  return String(v);
+}
+function incCatLabel(c){
+  return {L:'Low income', LM:'Lower-middle income', UM:'Upper-middle income', H:'High income'}[c] || 'Unclassified';
+}
+function catOf(field){
+  for (var cat in DATA.categories){
+    if (DATA.categories[cat].indexOf(field) !== -1) return cat;
+  }
+  return 'Macroeconomic (priced)';
+}
+function catColor(cat){
+  return ({
+    'Conflict & Safety':'var(--cat-conflict)',
+    'Environment':'var(--cat-environment)',
+    'Health':'var(--cat-health)',
+    'Macroeconomic (priced)':'var(--cat-macro)',
+    'Macroeconomic (implicit)':'var(--cat-implicit)'
+  })[cat] || 'var(--cat-macro)';
+}
+/* Pricing-methodology axis (separate from the topical category above):
+   how the dollar figure for each zapper was actually derived. */
+function typeOf(field){
+  for (var t in DATA.types){
+    if (DATA.types[t].indexOf(field) !== -1) return t;
+  }
+  return 'Direct cost';
+}
+function typeShort(t){
+  return ({
+    'Direct cost': 'direct',
+    'Life-years-reducing': 'life-years',
+    'Implicit (life-satisfaction)': 'implicit'
+  })[t] || t;
+}
+function typeSegClass(t){
+  return ({
+    'Direct cost': 'seg-direct',
+    'Life-years-reducing': 'seg-life',
+    'Implicit (life-satisfaction)': 'seg-implicit'
+  })[t] || 'seg-direct';
+}
+function cssVar(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/* ---------------- boot ---------------- */
+function fail(msg){
+  document.querySelector('main').innerHTML = '<p style="padding:40px;color:var(--ink-muted)">' + msg + '</p>';
+}
+if (typeof d3 === 'undefined' || typeof topojson === 'undefined' || typeof Chart === 'undefined'){
+  fail('A required chart library did not load from its CDN (d3: ' + (typeof d3) + ', topojson: ' + (typeof topojson) + ', Chart: ' + (typeof Chart) + '). Check your network connection and reload.');
+} else {
+  Promise.all([
+    fetch('data.json').then(function(r){ if(!r.ok) throw new Error('data.json ' + r.status); return r.json(); }),
+    fetch('world-topo.json').then(function(r){ if(!r.ok) throw new Error('world-topo.json ' + r.status); return r.json(); })
+  ]).then(function(res){
+    DATA = res[0]; TOPO = res[1];
+    FEATURES = topojson.feature(TOPO, TOPO.objects.countries).features;
+    boot();
+  }).catch(function(err){
+    fail('Could not load the dataset (' + err + ').');
+  });
+}
+
+function boot(){
+  wireTabs();
+  state.mapZappers = []; // default: nothing cumulated — map/table/chart start at raw, unadjusted GDP per capita
+  buildZapperPicker();
+  populateZapperSelect(document.getElementById('cmp-zapper'), 'sumZap');
+  populateCountrySelect(document.getElementById('prof-country'), 'US');
+  buildCountryPicker();
+  buildRegionPicker();
+  wireRankTable();
+
+  document.getElementById('slope-topn').addEventListener('input', function(e){
+    var n = parseInt(e.target.value, 10);
+    if (!n || n < 5) return;
+    state.slopeTopN = n;
+    renderSlopeChart(lastRankRows);
+  });
+  document.getElementById('slope-highlight').addEventListener('input', function(e){
+    state.slopeHighlight = e.target.value;
+    renderSlopeChart(lastRankRows);
+  });
+
+  document.getElementById('cmp-zapper').addEventListener('change', function(e){ state.cmpZapper = e.target.value; renderCompare(); });
+  document.getElementById('prof-country').addEventListener('change', function(e){ state.profCountry = e.target.value; renderProfile(); });
+
+  document.getElementById('cmp-world-toggle').addEventListener('change', function(e){
+    state.cmpWorld = e.target.checked;
+    renderCompare();
+  });
+
+  wireSeg('map-metric-seg', function(val){ state.mapMetric = val; renderMap(); });
+
+  wireYearSlider('map-year', 'map-year-val', function(y){ state.mapYear = y; renderMap(); });
+  wireYearSlider('prof-year', 'prof-year-val', function(y){ state.profYear = y; renderProfile(); });
+
+  // nothing pre-checked: World average, countries, and region overlays all start opt-in
+  syncCountryCheckboxes();
+  syncRegionCheckboxes();
+
+  renderMap();
+  renderCompare();
+  renderProfile();
+
+  var ro = new ResizeObserver(debounce(function(){ renderMap(); }, 250));
+  ro.observe(document.querySelector('.map-panel'));
+}
+
+var SHARED_FILTER_VIEWS = ['map','table','slope'];
+function wireTabs(){
+  var tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){
+      tabs.forEach(function(x){ x.setAttribute('aria-selected','false'); });
+      t.setAttribute('aria-selected','true');
+      var view = t.getAttribute('data-view');
+      document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+      document.getElementById('view-' + view).classList.add('active');
+      document.getElementById('shared-filters').classList.toggle('active', SHARED_FILTER_VIEWS.indexOf(view) !== -1);
+      state.view = view;
+      // World Map, Table and Winners & Losers share one dataset (lastRankRows) and one
+      // filter panel; renderMap() rebuilds all three every time, so switching among them
+      // just needs a redraw (map in particular, so it picks up its now-visible width).
+      if (SHARED_FILTER_VIEWS.indexOf(view) !== -1) renderMap();
+      if (view === 'compare') renderCompare();
+      if (view === 'profile') renderProfile();
+      if (location.hash !== '#' + view) history.replaceState(null, '', '#' + view);
+    });
+  });
+  var initial = (location.hash || '').replace('#','');
+  if (SHARED_FILTER_VIEWS.concat(['compare','profile']).indexOf(initial) !== -1){
+    document.querySelector('.tab[data-view="' + initial + '"]').click();
+  }
+}
+
+function wireSeg(id, cb, multi){
+  var seg = document.getElementById(id);
+  seg.querySelectorAll('button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if (!multi){
+        seg.querySelectorAll('button').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
+        btn.setAttribute('aria-pressed','true');
+      }
+      cb(btn.getAttribute('data-metric') || btn.getAttribute('data-overlay'), btn);
+    });
+  });
+}
+
+function wireYearSlider(sliderId, labelId, cb){
+  var el = document.getElementById(sliderId), lab = document.getElementById(labelId);
+  el.addEventListener('input', function(){
+    lab.textContent = el.value;
+    cb(parseInt(el.value, 10));
+  });
+}
+
+function debounce(fn, ms){
+  var t;
+  return function(){
+    var args = arguments;
+    clearTimeout(t);
+    t = setTimeout(function(){ fn.apply(null, args); }, ms);
+  };
+}
+
+/* ---------------- selects ---------------- */
+function zapperOptionsList(includeTotal){
+  var out = [];
+  if (includeTotal) out.push({value:'sumZap', label:'Total Priced Zappers', group:'Summary'});
+  for (var cat in DATA.categories){
+    DATA.categories[cat].forEach(function(f){
+      out.push({value:f, label:DATA.labels[f] || f, group:cat});
+    });
+  }
+  return out;
+}
+function populateZapperSelect(sel, def){
+  var opts = zapperOptionsList(true);
+  var groups = {};
+  opts.forEach(function(o){
+    if (!groups[o.group]) groups[o.group] = document.createElement('optgroup');
+    groups[o.group].label = o.group;
+  });
+  var order = ['Summary'].concat(Object.keys(DATA.categories));
+  order.forEach(function(g){
+    if (!groups[g]) return;
+    sel.appendChild(groups[g]);
+  });
+  opts.forEach(function(o){
+    var op = document.createElement('option');
+    op.value = o.value; op.textContent = o.label;
+    groups[o.group].appendChild(op);
+  });
+  sel.value = def;
+}
+function countryList(){
+  return Object.keys(DATA.countries).map(function(iso2){
+    return {iso2: iso2, name: DATA.countries[iso2].name};
+  }).sort(function(a,b){ return a.name.localeCompare(b.name); });
+}
+function populateCountrySelect(sel, def){
+  countryList().forEach(function(c){
+    var op = document.createElement('option');
+    op.value = c.iso2; op.textContent = c.name;
+    sel.appendChild(op);
+  });
+  sel.value = def;
+}
+
+/* ---------------- zapper picker (map, cumulative) ---------------- */
+function buildZapperPicker(){
+  var wrap = document.getElementById('zapper-groups');
+  wrap.innerHTML = '';
+  Object.keys(DATA.categories).forEach(function(cat){
+    var group = document.createElement('div');
+    group.className = 'zapper-group';
+    var h = document.createElement('h4');
+    h.textContent = cat;
+    h.style.color = catColorHex(cat);
+    group.appendChild(h);
+    DATA.categories[cat].forEach(function(f){
+      var row = document.createElement('div');
+      row.className = 'zapper-opt';
+      var id = 'zop-' + f;
+      row.innerHTML = '<input type="checkbox" id="' + id + '" value="' + f + '"><label for="' + id + '">' + (DATA.labels[f] || f) + '</label><span class="type-tag">' + typeShort(typeOf(f)) + '</span>';
+      group.appendChild(row);
+    });
+    wrap.appendChild(group);
+  });
+  syncZapperCheckboxes();
+
+  if (!document.querySelector('.zapper-picker .type-legend')){
+    var tl = document.createElement('div');
+    tl.className = 'type-legend';
+    tl.innerHTML =
+      '<span class="item"><span class="swatch" style="background:var(--type-direct)"></span>direct &mdash; actual spending or observed damage</span>' +
+      '<span class="item"><span class="swatch" style="background:var(--type-life)"></span>life-years &mdash; mortality/morbidity priced via value of statistical life</span>' +
+      '<span class="item"><span class="swatch implicit"></span>implicit &mdash; estimated from life-satisfaction regressions</span>';
+    document.querySelector('.zapper-picker').appendChild(tl);
+  }
+  if (!document.querySelector('.zapper-picker .comp-note')){
+    var cn = document.createElement('p');
+    cn.className = 'comp-note';
+    cn.style.marginTop = '8px';
+    cn.innerHTML = 'Cumulating only <em>direct</em> zappers gives a resource-adjusted GDP &mdash; a same-economy counterfactual (that spending could mechanically have gone elsewhere). Adding <em>life-years</em> zappers (VSL-priced) turns the total into a welfare-equivalent income instead: a claim about welfare expressed in income terms, not a bigger/smaller economy. <em>Implicit</em> zappers are regression-estimated and change the mix accordingly &mdash; see the profile tab for a country-level breakdown.';
+    document.querySelector('.zapper-picker').appendChild(cn);
+  }
+
+  wrap.addEventListener('change', function(e){
+    if (e.target.tagName !== 'INPUT') return;
+    var checked = Array.prototype.map.call(wrap.querySelectorAll('input:checked'), function(i){ return i.value; });
+    state.mapZappers = checked;
+    updateZapperCount();
+    renderMap();
+  });
+
+  document.querySelectorAll('.zapper-presets button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var preset = btn.getAttribute('data-preset');
+      if (preset === 'priced') state.mapZappers = DATA.zapperFields.slice();
+      else if (preset === 'all') state.mapZappers = DATA.zapperFields.concat(DATA.implicitFields);
+      else state.mapZappers = [];
+      syncZapperCheckboxes();
+      updateZapperCount();
+      renderMap();
+    });
+  });
+  updateZapperCount();
+}
+function syncZapperCheckboxes(){
+  document.querySelectorAll('#zapper-groups input').forEach(function(inp){
+    inp.checked = state.mapZappers.indexOf(inp.value) !== -1;
+  });
+}
+function updateZapperCount(){
+  document.getElementById('zapper-count').textContent = state.mapZappers.length + ' of 16 selected';
+  document.getElementById('zero-zapper-banner').hidden = state.mapZappers.length !== 0;
+}
+function catColorHex(cat){
+  return ({
+    'Conflict & Safety': cssVar('--cat-conflict'),
+    'Environment': cssVar('--cat-environment'),
+    'Health': cssVar('--cat-health'),
+    'Macroeconomic (priced)': cssVar('--cat-macro'),
+    'Macroeconomic (implicit)': cssVar('--cat-implicit')
+  })[cat] || cssVar('--cat-macro');
+}
+/* Sum of the selected zappers for one country-year record. Mirrors the
+   spreadsheet's own sumZap convention: if ANY selected zapper is missing
+   for that country-year, the cumulative total is "no data" rather than a
+   partial (and misleadingly low) sum. Returns null when no fields are
+   missing-but-selected is impossible to tell apart from a true zero, so
+   an empty selection returns 0 (nothing subtracted). */
+function cumulativeZapValue(rec, fields){
+  if (!rec || fields.length === 0) return 0;
+  var total = 0;
+  for (var i = 0; i < fields.length; i++){
+    var v = rec[fields[i]];
+    if (v === null || v === undefined) return null;
+    total += v;
+  }
+  return total;
+}
+
+/* ---------------- country picker (compare) ---------------- */
+function buildCountryPicker(){
+  var list = document.getElementById('cmp-country-list');
+  var countries = countryList();
+  countries.forEach(function(c, i){
+    var row = document.createElement('label');
+    row.className = 'country-row';
+    row.dataset.name = c.name.toLowerCase();
+    row.innerHTML = '<input type="checkbox" value="' + c.iso2 + '"><span class="swatch" style="background:' + QUALITATIVE[i % QUALITATIVE.length] + '"></span><span>' + c.name + '</span>';
+    list.appendChild(row);
+  });
+  list.addEventListener('change', function(e){
+    if (e.target.tagName !== 'INPUT') return;
+    var checked = Array.prototype.map.call(list.querySelectorAll('.country-row input:checked'), function(i){ return i.value; });
+    if (checked.length > 6){
+      e.target.checked = false;
+      return;
+    }
+    state.cmpCountries = checked;
+    renderCompare();
+  });
+  document.getElementById('cmp-search').addEventListener('input', function(e){
+    var q = e.target.value.toLowerCase();
+    list.querySelectorAll('.country-row').forEach(function(row){
+      row.style.display = row.dataset.name.indexOf(q) !== -1 ? '' : 'none';
+    });
+  });
+}
+function syncCountryCheckboxes(){
+  var list = document.getElementById('cmp-country-list');
+  list.querySelectorAll('.country-row').forEach(function(row){
+    var inp = row.querySelector('input');
+    inp.checked = state.cmpCountries.indexOf(inp.value) !== -1;
+  });
+  document.getElementById('cmp-world-toggle').checked = state.cmpWorld;
+}
+
+/* ---------------- standalone region picker (compare) ----------------
+   World Bank regions and UN sub-regions as their own checkable rows —
+   independent of whether any country is checked, so "East Asia & Pacific"
+   can be plotted on its own with no representative country selected. */
+function uniqueRegions(){
+  var wb = {}, un = {};
+  for (var iso2 in DATA.countries){
+    var c = DATA.countries[iso2];
+    if (c.wbRegion && c.wbRegion !== '..') wb[c.wbRegion] = true;
+    if (c.unSubRegion && c.unSubRegion !== '..') un[c.unSubRegion] = true;
+  }
+  return { wb: Object.keys(wb).sort(), un: Object.keys(un).sort() };
+}
+function regionKey(type, name){ return type + '|' + name; }
+function buildRegionPicker(){
+  var regions = uniqueRegions();
+  function fill(containerId, type, names){
+    var wrap = document.getElementById(containerId);
+    names.forEach(function(name){
+      var row = document.createElement('label');
+      row.className = 'region-row';
+      var key = regionKey(type, name);
+      row.innerHTML = '<input type="checkbox" value="' + key + '"><span>' + name + '</span>';
+      wrap.appendChild(row);
+    });
+  }
+  fill('cmp-wb-regions', 'wb', regions.wb);
+  fill('cmp-un-regions', 'un', regions.un);
+
+  document.querySelector('.region-picker').addEventListener('change', function(e){
+    if (e.target.tagName !== 'INPUT') return;
+    var key = e.target.value;
+    var idx = state.cmpRegions.indexOf(key);
+    if (e.target.checked && idx === -1) state.cmpRegions.push(key);
+    if (!e.target.checked && idx !== -1) state.cmpRegions.splice(idx, 1);
+    renderCompare();
+  });
+}
+function syncRegionCheckboxes(){
+  document.querySelectorAll('.region-row input').forEach(function(inp){
+    inp.checked = state.cmpRegions.indexOf(inp.value) !== -1;
+  });
+}
+
+/* ================= MAP ================= */
+var mapProjection, mapPath;
+function renderMap(){
+  var svg = d3.select('#map-svg');
+  var panel = document.querySelector('.map-panel');
+  // clientWidth is 0 while the map tab is hidden behind another tab (Table, Winners &
+  // Losers) — fall back to a sane width rather than let a negative value reach viewBox.
+  var cw = panel.clientWidth;
+  var w = (cw && cw > 20) ? (cw - 20) : 900;
+  var h = Math.max(320, w * 0.52);
+  svg.attr('viewBox', '0 0 ' + w + ' ' + h);
+
+  mapProjection = d3.geoNaturalEarth1();
+  mapPath = d3.geoPath(mapProjection);
+  var fc = {type:'FeatureCollection', features: FEATURES};
+  mapProjection.fitSize([w, h], fc);
+
+  var year = String(state.mapYear);
+  var fields = state.mapZappers;
+
+  var topoIdToIso2 = {};
+  for (var iso2 in DATA.countries){
+    var tid = DATA.countries[iso2].topoId;
+    if (tid) topoIdToIso2[tid] = iso2;
+  }
+
+  function valueFor(iso2x){
+    var rec = iso2x && DATA.countries[iso2x].years[year];
+    if (!rec) return null;
+    var z = cumulativeZapValue(rec, fields);
+    if (z === null) return null;
+    if (state.mapMetric === 'pct'){
+      if (rec.yPPP === null || rec.yPPP === undefined || rec.yPPP === 0) return null;
+      return z / rec.yPPP * 100;
+    }
+    return z;
+  }
+
+  var values = [];
+  FEATURES.forEach(function(f){
+    var v = valueFor(topoIdToIso2[f.id]);
+    if (v !== null && v !== undefined) values.push(v);
+  });
+  var maxV = values.length ? d3.max(values) : 1;
+  var colorScale = d3.scaleSequentialSqrt(d3.interpolateYlOrRd).domain([0, maxV || 1]);
+
+  var sel = svg.selectAll('path').data(FEATURES, function(f){ return f.id; });
+  sel.exit().remove();
+  var entered = sel.enter().append('path');
+  entered.merge(sel)
+    .attr('class', 'map-country')
+    .attr('d', mapPath)
+    .attr('fill', function(f){
+      var v = valueFor(topoIdToIso2[f.id]);
+      if (v === null || v === undefined) return 'var(--nodata)';
+      return colorScale(v);
+    })
+    .classed('nodata', function(f){
+      var v = valueFor(topoIdToIso2[f.id]);
+      return v === null || v === undefined;
+    })
+    .on('mousemove', function(ev, f){
+      var iso2x = topoIdToIso2[f.id];
+      var name = iso2x ? DATA.countries[iso2x].name : (f.properties && f.properties.name) || 'Unknown';
+      var v = valueFor(iso2x);
+      var valStr = v === null || v === undefined ? 'no data for ' + year : (state.mapMetric === 'pct' ? fmtPct(v) : fmtMoney(v) + ' / person');
+      var sub = fields.length + ' zapper' + (fields.length === 1 ? '' : 's') + ' cumulated';
+      showTooltip(ev, '<strong>' + name + '</strong>' + sub + '<br><span class="tt-val">' + valStr + '</span>');
+    })
+    .on('mouseleave', hideTooltip);
+
+  // legend
+  var stops = d3.range(0, 1.01, 0.1).map(function(t){ return colorScale(t * (maxV || 1)); });
+  document.getElementById('legend-grad').style.background = 'linear-gradient(90deg,' + stops.join(',') + ')';
+  document.getElementById('legend-min').textContent = state.mapMetric === 'pct' ? '0%' : '$0';
+  document.getElementById('legend-max').textContent = state.mapMetric === 'pct' ? fmtPct(maxV) : fmtMoney(maxV);
+  document.getElementById('map-coverage-note').textContent = values.length + ' of ' + FEATURES.length + ' territories reporting for ' + year + '.';
+
+  lastRankRows = buildRankRows(year, fields);
+  renderRankTable(lastRankRows);
+  renderSlopeChart(lastRankRows);
+}
+
+/* ================= RANKINGS TABLE ================= */
+var lastRankRows = [];
+function buildRankRows(year, fields){
+  var directSel = fields.filter(function(f){ return DATA.types['Direct cost'].indexOf(f) !== -1; });
+  var lifeSel = fields.filter(function(f){ return DATA.types['Life-years-reducing'].indexOf(f) !== -1; });
+  var implicitSel = fields.filter(function(f){ return DATA.types['Implicit (life-satisfaction)'].indexOf(f) !== -1; });
+
+  var rows = [];
+  for (var iso2 in DATA.countries){
+    var c = DATA.countries[iso2];
+    var rec = c.years[year];
+    if (!rec) continue;
+    var yppp = rec.yPPP;
+    var zap = cumulativeZapValue(rec, fields);
+    var adj = (yppp !== null && yppp !== undefined && zap !== null) ? yppp - zap : null;
+    rows.push({
+      iso2: iso2, name: c.name,
+      region: c.wbRegion && c.wbRegion !== '..' ? c.wbRegion : (c.unSubRegion || ''),
+      yppp: yppp, zap: zap, adj: adj,
+      directSum: zap !== null ? cumulativeZapValue(rec, directSel) : null,
+      lifeSum: zap !== null ? cumulativeZapValue(rec, lifeSel) : null,
+      implicitSum: zap !== null ? cumulativeZapValue(rec, implicitSel) : null
+    });
+  }
+  // GDP rank (unadjusted), highest first
+  var byGdp = rows.filter(function(r){ return r.yppp !== null && r.yppp !== undefined; })
+    .sort(function(a,b){ return b.yppp - a.yppp; });
+  byGdp.forEach(function(r,i){ r.rankGdp = i + 1; });
+  // Adjusted rank, highest first
+  var byAdj = rows.filter(function(r){ return r.adj !== null && r.adj !== undefined; })
+    .sort(function(a,b){ return b.adj - a.adj; });
+  byAdj.forEach(function(r,i){ r.rankAdj = i + 1; });
+  rows.forEach(function(r){
+    r.delta = (r.rankGdp !== undefined && r.rankAdj !== undefined) ? r.rankGdp - r.rankAdj : null;
+  });
+  return rows;
+}
+function wireRankTable(){
+  document.querySelectorAll('#rank-table thead th').forEach(function(th){
+    th.addEventListener('click', function(){
+      var key = th.getAttribute('data-key');
+      if (state.tableSort.key === key){
+        state.tableSort.dir = state.tableSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.tableSort.key = key;
+        state.tableSort.dir = (key === 'name' || key === 'region') ? 'asc' : 'desc';
+      }
+      renderRankTable(lastRankRows);
+    });
+  });
+}
+function compCell(r){
+  if (r.zap === null || r.zap === undefined) return fmtMoney(r.zap);
+  if (r.zap === 0) return fmtMoney(0);
+  var dPct = (r.directSum || 0) / r.zap * 100;
+  var lPct = (r.lifeSum || 0) / r.zap * 100;
+  var iPct = Math.max(0, 100 - dPct - lPct); // selection may include implicit fields too
+  var title = 'direct ' + fmtMoney(r.directSum) + ', life-years ' + fmtMoney(r.lifeSum) + (r.implicitSum ? ', implicit ' + fmtMoney(r.implicitSum) : '');
+  return '<div class="t-zap-cell"><span>' + fmtMoney(r.zap) + '</span>' +
+    '<div class="comp-bar" title="' + title + '">' +
+      '<span class="seg-direct" style="width:' + dPct + '%"></span>' +
+      '<span class="seg-life" style="width:' + lPct + '%"></span>' +
+      '<span class="seg-implicit" style="width:' + iPct + '%"></span>' +
+    '</div></div>';
+}
+function sortRows(rows, key, dir){
+  var mul = dir === 'asc' ? 1 : -1;
+  return rows.slice().sort(function(a,b){
+    var av = a[key], bv = b[key];
+    var an = (av === null || av === undefined), bn = (bv === null || bv === undefined);
+    if (an && bn) return 0;
+    if (an) return 1;   // nulls always sort to the bottom
+    if (bn) return -1;
+    if (typeof av === 'string') return av.localeCompare(bv) * mul;
+    return (av - bv) * mul;
+  });
+}
+function renderRankTable(rows){
+  var sorted = sortRows(rows, state.tableSort.key, state.tableSort.dir);
+
+  document.querySelectorAll('#rank-table thead th').forEach(function(th){
+    var k = th.getAttribute('data-key');
+    th.classList.toggle('sorted', k === state.tableSort.key);
+    th.querySelector('.arrow').textContent = k === state.tableSort.key ? (state.tableSort.dir === 'asc' ? '↑' : '↓') : '';
+  });
+
+  var tbody = document.getElementById('rank-tbody');
+  tbody.innerHTML = sorted.map(function(r){
+    var deltaCell = '—';
+    if (r.delta !== null && r.delta !== undefined){
+      if (r.delta > 0) deltaCell = '<span class="delta-up">▲ ' + r.delta + '</span>';
+      else if (r.delta < 0) deltaCell = '<span class="delta-down">▼ ' + Math.abs(r.delta) + '</span>';
+      else deltaCell = '<span class="delta-flat">—</span>';
+    }
+    return '<tr>' +
+      '<td>' + (r.rankAdj || '—') + '</td>' +
+      '<td class="t-country">' + r.name + '</td>' +
+      '<td class="t-region">' + (r.region || '—') + '</td>' +
+      '<td>' + fmtMoney(r.yppp) + '</td>' +
+      '<td>' + compCell(r) + '</td>' +
+      '<td>' + fmtMoney(r.adj) + '</td>' +
+      '<td>' + (r.rankGdp || '—') + '</td>' +
+      '<td>' + deltaCell + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+/* ================= WINNERS & LOSERS SLOPE CHART ================= */
+function renderSlopeChart(rows){
+  var svg = document.getElementById('slope-svg');
+  var topN = state.slopeTopN || 30;
+  var query = (state.slopeHighlight || '').trim().toLowerCase();
+
+  var selected = rows.filter(function(r){ return r.rankGdp && r.rankGdp <= topN; })
+    .sort(function(a,b){ return a.rankGdp - b.rankGdp; });
+
+  if (selected.length === 0){
+    svg.innerHTML = '';
+    document.getElementById('slope-note').textContent = 'No countries with GDP data for this year.';
+    return;
+  }
+
+  var withAdj = selected.filter(function(r){ return !!r.rankAdj; });
+  var withoutAdj = selected.filter(function(r){ return !r.rankAdj; });
+  var maxRealRank = Math.max(topN, withAdj.length ? d3.max(withAdj, function(r){ return r.rankAdj; }) : 0);
+  var gapRank = maxRealRank + 2;
+  withoutAdj.forEach(function(r, i){ r._pseudoRank = gapRank + i; });
+  var totalRank = withoutAdj.length ? (gapRank + withoutAdj.length - 1) : maxRealRank;
+
+  var W = 640, leftX = 215, rightX = 425;
+  var rowH = Math.max(11, Math.min(20, 820 / totalRank));
+  var topPad = 34, bottomPad = 14;
+  var H = topPad + totalRank * rowH + bottomPad;
+  function yPos(rank){ return topPad + (rank - 0.5) * rowH; }
+
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+  var parts = [];
+  parts.push('<text class="slope-axis-label" x="' + leftX + '" y="16" text-anchor="middle">GDP / capita</text>');
+  parts.push('<text class="slope-axis-label" x="' + rightX + '" y="16" text-anchor="middle">Adjusted</text>');
+  parts.push('<line x1="' + leftX + '" y1="' + topPad + '" x2="' + leftX + '" y2="' + (H - bottomPad) + '" class="slope-divider"></line>');
+  parts.push('<line x1="' + rightX + '" y1="' + topPad + '" x2="' + rightX + '" y2="' + (H - bottomPad) + '" class="slope-divider"></line>');
+
+  if (withoutAdj.length){
+    var dividerY = topPad + maxRealRank * rowH + rowH / 2;
+    parts.push('<line x1="150" y1="' + dividerY + '" x2="' + (W - 150) + '" y2="' + dividerY + '" class="slope-divider"></line>');
+    parts.push('<text class="slope-rank" x="' + (W/2) + '" y="' + (dividerY - 4) + '" text-anchor="middle">no zapper data this year ↓</text>');
+  }
+
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+  selected.forEach(function(r){
+    var isMatch = query && r.name.toLowerCase().indexOf(query) !== -1;
+    var dim = query && !isMatch;
+    var ly = yPos(r.rankGdp);
+    var hasAdj = !!r.rankAdj;
+    var ry = hasAdj ? yPos(r.rankAdj) : yPos(r._pseudoRank);
+    var lineClass = 'slope-line ';
+    if (!hasAdj) lineClass += 'nodata';
+    else if (r.delta > 0) lineClass += 'up';
+    else if (r.delta < 0) lineClass += 'down';
+    else lineClass += 'flat';
+    if (dim) lineClass += ' dim'; else if (isMatch) lineClass += ' hi';
+    var dotClass = 'slope-dot' + (dim ? ' dim' : '');
+    var labelClass = 'slope-label' + (dim ? ' dim' : '') + (isMatch ? ' hi' : '');
+    var dotColor = !hasAdj ? cssVar('--ink-faint') : (r.delta > 0 ? cssVar('--cat-environment') : r.delta < 0 ? cssVar('--cat-conflict') : cssVar('--ink-faint'));
+
+    parts.push('<g data-iso2="' + r.iso2 + '">');
+    parts.push('<line class="' + lineClass + '" x1="' + leftX + '" y1="' + ly + '" x2="' + rightX + '" y2="' + ry + '"></line>');
+    parts.push('<circle class="' + dotClass + '" cx="' + leftX + '" cy="' + ly + '" r="2.6" fill="' + dotColor + '"></circle>');
+    parts.push('<circle class="' + dotClass + '" cx="' + rightX + '" cy="' + ry + '" r="2.6" fill="' + dotColor + '"></circle>');
+    parts.push('<text class="' + labelClass + '" x="' + (leftX - 8) + '" y="' + (ly + 3.5) + '" text-anchor="end">' + r.rankGdp + '. ' + esc(r.name) + '</text>');
+    parts.push('<text class="' + labelClass + '" x="' + (rightX + 8) + '" y="' + (ry + 3.5) + '" text-anchor="start">' + (hasAdj ? (r.rankAdj + '. ' + esc(r.name)) : (esc(r.name) + ' — no data')) + '</text>');
+    parts.push('</g>');
+  });
+
+  svg.innerHTML = parts.join('');
+
+  svg.querySelectorAll('g').forEach(function(g){
+    var r = selected.find(function(x){ return x.iso2 === g.getAttribute('data-iso2'); });
+    if (!r) return;
+    var adjTxt = r.rankAdj ? ('#' + r.rankAdj) : 'no data';
+    var deltaTxt = r.delta > 0 ? (r.delta + ' spots up') : r.delta < 0 ? (Math.abs(r.delta) + ' spots down') : r.delta === 0 ? 'unchanged' : '';
+    var html = '<strong>' + r.name + '</strong>GDP rank #' + r.rankGdp + ' → adjusted ' + adjTxt + (deltaTxt ? '<br><span class="tt-val">' + deltaTxt + '</span>' : '');
+    g.addEventListener('mouseenter', function(ev){ showTooltip(ev, html); });
+    g.addEventListener('mousemove', function(ev){ showTooltip(ev, html); });
+    g.addEventListener('mouseleave', hideTooltip);
+  });
+
+  var climbed = withAdj.filter(function(r){ return r.delta > 0; }).length;
+  var fell = withAdj.filter(function(r){ return r.delta < 0; }).length;
+  var unchanged = withAdj.filter(function(r){ return r.delta === 0; }).length;
+  var note = 'Top ' + topN + ' by GDP per capita: ' + climbed + ' climbed, ' + fell + ' fell, ' + unchanged + ' unchanged after the cumulated zappers';
+  note += withoutAdj.length ? ('; ' + withoutAdj.length + ' had no zapper data this year.') : '.';
+  if (query){
+    var inSelected = selected.some(function(r){ return r.name.toLowerCase().indexOf(query) !== -1; });
+    if (!inSelected){
+      var elsewhere = rows.find(function(r){ return r.name.toLowerCase().indexOf(query) !== -1; });
+      note = elsewhere
+        ? ('"' + state.slopeHighlight + '" is ranked #' + (elsewhere.rankGdp || '?') + ' by GDP per capita — raise "Show top" above ' + elsewhere.rankGdp + ' to see it.')
+        : ('No country matches "' + state.slopeHighlight + '".');
+    }
+  }
+  document.getElementById('slope-note').textContent = note;
+}
+
+function showTooltip(ev, html){
+  var tt = document.getElementById('tooltip');
+  tt.innerHTML = html;
+  tt.hidden = false;
+  var x = ev.clientX + 14, y = ev.clientY + 14;
+  var tw = tt.offsetWidth, th = tt.offsetHeight;
+  if (x + tw > window.innerWidth - 10) x = ev.clientX - tw - 14;
+  if (y + th > window.innerHeight - 10) y = ev.clientY - th - 14;
+  tt.style.left = x + 'px';
+  tt.style.top = y + 'px';
+}
+function hideTooltip(){ document.getElementById('tooltip').hidden = true; }
+
+/* ================= COMPARE ================= */
+var compareChart = null;
+/* sumZap / sumZapPerc as stored in the sheet can drift out of sync with the
+   13 live component columns (confirmed against the data: differs in most
+   rows, not just a rounding artifact — worth a look upstream). Recompute
+   both live from the components everywhere they're displayed, rather than
+   trust the stored value, so every view agrees with itself. */
+function fieldValue(rec, field){
+  if (!rec) return null;
+  if (field === 'sumZap') return cumulativeZapValue(rec, DATA.zapperFields);
+  if (field === 'sumZapPerc'){
+    var s = cumulativeZapValue(rec, DATA.zapperFields);
+    return (s !== null && rec.yPPP) ? (s / rec.yPPP * 100) : null;
+  }
+  return rec[field];
+}
+function regionAverageSeries(regionName, field){
+  var r = DATA.regions[regionName];
+  if (!r) return DATA.years.map(function(){ return null; });
+  return DATA.years.map(function(y){
+    return fieldValue(r.years[String(y)], field);
+  });
+}
+function countrySeries(iso2, field){
+  var c = DATA.countries[iso2];
+  return DATA.years.map(function(y){
+    return fieldValue(c.years[String(y)], field);
+  });
+}
+function renderCompare(){
+  var field = state.cmpZapper;
+  var labels = DATA.years.map(String);
+  var datasets = [];
+
+  state.cmpCountries.forEach(function(iso2, i){
+    datasets.push({
+      label: DATA.countries[iso2].name,
+      data: countrySeries(iso2, field),
+      borderColor: QUALITATIVE[i % QUALITATIVE.length],
+      backgroundColor: QUALITATIVE[i % QUALITATIVE.length],
+      borderWidth: 2.4,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      spanGaps: false,
+      tension: 0.15
+    });
+  });
+
+  if (state.cmpWorld){
+    datasets.push({
+      label: 'World average',
+      data: regionAverageSeries('World', field),
+      borderColor: cssVar('--ink-faint'),
+      borderDash: [6,4],
+      borderWidth: 2,
+      pointRadius: 0,
+      spanGaps: false,
+      tension: 0.15
+    });
+  }
+  // Standalone region averages — each is its own checked row (wb|<name> or un|<name>),
+  // entirely independent of any country selection.
+  state.cmpRegions.forEach(function(key, i){
+    var parts = key.split('|');
+    var type = parts[0], name = parts[1];
+    datasets.push({
+      label: name + (type === 'un' ? ' (UN)' : ' (WB)'),
+      data: regionAverageSeries(name, field),
+      borderColor: QUALITATIVE[(state.cmpCountries.length + i) % QUALITATIVE.length],
+      borderDash: [2,3],
+      borderWidth: 1.6,
+      pointRadius: 0,
+      spanGaps: false,
+      tension: 0.15
+    });
+  });
+
+  document.getElementById('cmp-empty-note').hidden = datasets.length !== 0;
+
+  var isPct = field === 'sumZapPerc';
+  var yFmt = function(v){ return isPct ? v + '%' : '$' + v; };
+
+  if (compareChart) compareChart.destroy();
+  var ctx = document.getElementById('compare-chart').getContext('2d');
+  compareChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: cssVar('--ink-muted'), boxWidth: 14, font: { family: 'IBM Plex Sans', size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx){
+              var v = ctx.parsed.y;
+              if (v === null || v === undefined) return ctx.dataset.label + ': no data';
+              return ctx.dataset.label + ': ' + (isPct ? v.toFixed(1)+'%' : fmtMoney(v));
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: cssVar('--ink-muted'), font: { family: 'IBM Plex Mono', size: 11 } }, grid: { color: cssVar('--border') } },
+        y: {
+          ticks: { color: cssVar('--ink-muted'), font: { family: 'IBM Plex Mono', size: 11 }, callback: yFmt },
+          grid: { color: cssVar('--border') },
+          title: { display: true, text: DATA.labels[field] || field, color: cssVar('--ink-muted') }
+        }
+      }
+    }
+  });
+}
+
+/* ================= PROFILE ================= */
+var profileChart = null;
+function renderProfile(){
+  var iso2 = state.profCountry;
+  var year = String(state.profYear);
+  var c = DATA.countries[iso2];
+  var rec = c.years[year] || {};
+
+  var fields = zapperOptionsList(false).map(function(o){ return o.value; });
+  var rows = fields.map(function(f){
+    return { field: f, label: DATA.labels[f] || f, cat: catOf(f), value: rec[f] };
+  });
+  var present = rows.filter(function(r){ return r.value !== null && r.value !== undefined; });
+  present.sort(function(a,b){ return b.value - a.value; });
+  var missingCount = rows.length - present.length;
+
+  document.getElementById('profile-no-data').textContent = missingCount > 0
+    ? missingCount + ' of ' + rows.length + ' zappers have no reported value for ' + c.name + ' in ' + year + '.'
+    : 'All ' + rows.length + ' zappers reported for ' + c.name + ' in ' + year + '.';
+
+  if (profileChart) profileChart.destroy();
+  var ctx = document.getElementById('profile-chart').getContext('2d');
+  profileChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: present.map(function(r){ return r.label; }),
+      datasets: [{
+        data: present.map(function(r){ return r.value; }),
+        backgroundColor: present.map(function(r){ return cssVar('--' + catCssVarSuffix(r.cat)); }),
+        borderRadius: 4,
+        barThickness: 18
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(ctx){ return fmtMoney(ctx.parsed.x) + ' per person'; } } }
+      },
+      scales: {
+        x: { ticks: { color: cssVar('--ink-muted'), font: { family: 'IBM Plex Mono', size: 11 }, callback: function(v){ return '$'+v; } }, grid: { color: cssVar('--border') } },
+        y: { ticks: { color: cssVar('--ink-muted'), font: { family: 'IBM Plex Sans', size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+
+  // info panel
+  var yppp = rec.yPPP;
+  var directSum = cumulativeZapValue(rec, DATA.types['Direct cost']);
+  var lifeSum = cumulativeZapValue(rec, DATA.types['Life-years-reducing']);
+  var implicitSum = cumulativeZapValue(rec, DATA.types['Implicit (life-satisfaction)']);
+  var compBase = (directSum !== null && lifeSum !== null) ? (directSum + lifeSum) : null;
+  // Recomputed from the 13 live component columns, not the sheet's stored
+  // sumZap/sumZapPerc: those two can drift out of sync with the components
+  // (see note to Marcus).
+  //
+  // Two different measures, not one "total" — they answer different questions:
+  //   Resource-adjusted GDP   = GDP − direct costs.
+  //     Direct costs (military, out-of-pocket disaster/health expense, resource
+  //     depletion) are actual cash outlays: a genuine same-economy counterfactual.
+  //     If this country had spent less here, that output could mechanically have
+  //     gone to something else this year.
+  //   Welfare-equivalent income = GDP − direct costs − VSL-priced life-years.
+  //     Life-years-reducing zappers are priced at the Value of a Statistical Life,
+  //     a shadow price revealed by what people pay to shave mortality risk — not a
+  //     market price for anything produced. Subtracting it answers "what income
+  //     would be welfare-equivalent to this population's actual mortality
+  //     experience," not "how much bigger would GDP have been."
+  var resourceAdj = (yppp !== null && yppp !== undefined && directSum !== null) ? (yppp - directSum) : null;
+  var resourceAdjPct = (directSum !== null && yppp) ? (directSum / yppp * 100) : null;
+  var welfareEq = (yppp !== null && yppp !== undefined && compBase !== null) ? (yppp - compBase) : null;
+  var welfareEqPct = (compBase !== null && yppp) ? (compBase / yppp * 100) : null;
+
+  function compRow(label, amt, base, swatchClass, note){
+    var pct = (amt !== null && base) ? (amt / base * 100) : null;
+    return '<div class="comp-row">' +
+      '<span class="lbl">' + label + (note ? ' <span style="color:var(--ink-faint)">(' + note + ')</span>' : '') + '</span>' +
+      '<span class="amt">' + (amt !== null ? fmtMoney(amt) + (pct !== null ? '  · ' + pct.toFixed(0) + '%' : '') : '—') + '</span>' +
+      '<div class="track"><span class="' + swatchClass + '" style="width:' + (pct !== null ? Math.max(2,pct) : 0) + '%"></span></div>' +
+    '</div>';
+  }
+
+  document.getElementById('profile-info').innerHTML =
+    '<h2>' + c.name + '</h2>' +
+    '<div class="sub">' + year + ' &middot; ' + (c.wbRegion && c.wbRegion !== '..' ? c.wbRegion : c.unSubRegion) + '</div>' +
+    '<div class="fact-grid">' +
+      fact('GDP per capita, PPP', yppp !== null && yppp !== undefined ? fmtMoney(yppp) : '—') +
+      fact('Population', fmtPop(popFor(c, year))) +
+      fact('Income group', incCatLabel(c.incCat[year] || Object.values(c.incCat)[0])) +
+      fact('Sub-region', c.unSubRegion && c.unSubRegion !== '..' ? c.unSubRegion : '—') +
+    '</div>' +
+    '<div class="tier-boxes">' +
+      '<div class="total-box tier-resource">' +
+        '<div class="k">Resource-adjusted GDP/cap</div>' +
+        '<div class="v">' + (resourceAdj !== null && resourceAdj !== undefined ? fmtMoney(resourceAdj) : '—') + '</div>' +
+        '<div class="v2">&minus;' + (directSum !== null ? fmtMoney(directSum) : '—') + (resourceAdjPct !== null ? ' &middot; ' + resourceAdjPct.toFixed(0) + '% of GDP' : '') + '</div>' +
+        '<span class="tag">direct costs only &middot; same-economy counterfactual</span>' +
+      '</div>' +
+      '<div class="total-box tier-welfare">' +
+        '<div class="k">Welfare-equivalent income/cap</div>' +
+        '<div class="v">' + (welfareEq !== null && welfareEq !== undefined ? fmtMoney(welfareEq) : '—') + '</div>' +
+        '<div class="v2">&minus;' + (compBase !== null ? fmtMoney(compBase) : '—') + (welfareEqPct !== null ? ' &middot; ' + welfareEqPct.toFixed(0) + '% of GDP' : '') + '</div>' +
+        '<span class="tag">direct + VSL-priced life-years &middot; welfare measure, not a bigger/smaller economy</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="comp-rows">' +
+      compRow('Direct cost', directSum, compBase, 'seg-direct', 'actual spending/damage') +
+      compRow('Life-years-reducing', lifeSum, compBase, 'seg-life', 'VSL-priced mortality') +
+      compRow('Implicit', implicitSum, yppp, 'seg-implicit', 'regression-estimated; in neither measure above') +
+    '</div>' +
+    '<p class="comp-note">Resource-adjusted GDP subtracts only direct costs (actual cash outlays) &mdash; a claim about the same measured economy. Welfare-equivalent income additionally subtracts life-years-reducing zappers priced at the Value of a Statistical Life, a shadow price derived from risk-avoidance behavior, not a market price for output; it says this population\'s welfare is as if its income were this much lower, not that its GDP would have been this much higher. Implicit zappers (inflation, unemployment, the GNI&ndash;GDP gap) are priced from life-satisfaction regressions &mdash; shown for context, in neither measure.</p>' +
+    '<div class="type-legend">' +
+      '<span class="item"><span class="swatch" style="background:var(--type-direct)"></span>Direct cost</span>' +
+      '<span class="item"><span class="swatch" style="background:var(--type-life)"></span>Life-years-reducing</span>' +
+      '<span class="item"><span class="swatch implicit"></span>Implicit</span>' +
+    '</div>';
+
+  // category legend (always show all five, consistent regardless of what's present)
+  var legend = document.getElementById('profile-cat-legend');
+  legend.innerHTML = '';
+  Object.keys(DATA.categories).forEach(function(cat){
+    var item = document.createElement('span');
+    item.className = 'item';
+    item.innerHTML = '<span class="swatch" style="background:var(--' + catCssVarSuffix(cat) + ')"></span>' + cat;
+    legend.appendChild(item);
+  });
+}
+function fact(k, v){
+  return '<div class="fact"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>';
+}
+function popFor(c, year){
+  var rec = c.years[year];
+  return rec ? rec.Pop : null;
+}
+function catCssVarSuffix(cat){
+  return ({
+    'Conflict & Safety':'cat-conflict',
+    'Environment':'cat-environment',
+    'Health':'cat-health',
+    'Macroeconomic (priced)':'cat-macro',
+    'Macroeconomic (implicit)':'cat-implicit'
+  })[cat] || 'cat-macro';
+}
+
+})();
+</script>
