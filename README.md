@@ -1,7 +1,9 @@
 # HappyZappy Explorer
 
-An interactive companion web app for the paper *Quality of Life Adjusted GDP per
-Capita: Methodology, Web App, and Impact on Happiness* (Marcus [Marktanner]).
+An interactive companion web app for the paper *"Happy Zappy GDP" — Accounting
+for what People Prefer to Avoid*, currently under double-blind review.
+Author-identifying details are withheld from this repository for the
+duration of review and will be restored after a publication decision.
 
 It prices **happiness zappers** — costs no household chose to pay (conflict,
 pollution, disease, forced saving against risk) — in dollars per person, so
